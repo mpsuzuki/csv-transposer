@@ -4,128 +4,293 @@
   <meta charset="UTF-8">
   <title>CSV/TSV 転置ツール</title>
   <style>
-    #csvOutput {
-      white-space: pre;
-      overflow-x: auto;
-      overflow-y: auto;
-      font-family: monospace;
-    }
-    #csvInput {
+    #csvInput, #csvOutput {
       white-space: pre;
       overflow-x: auto;
       overflow-y: auto;
       font-family: monospace;
       border: 2px solid #ccc;
       padding: 5px;
+      width: 100%;
+      box-sizing: border-box;
     }
     #csvInput.dragover {
       background-color: #eef;
       border-color: #44f;
     }
+    #csvInputWrapper {
+      width: 100%;
+      position: relative;
+      display: inline-block;
+    }
+    #fileButtonOverlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0.9;
+      background: #fff;
+      padding: 6px 12px;
+      border: 1px solid #888;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      z-index: 10;
+    }
+    #fileButtonOverlay:hover {
+      opacity: 1;
+    }
+    #transposeBtn {
+      display: block;
+      width: 100%;
+      padding: 14px 0;
+      font-size: 18px;
+      font-weight: bold;
+      background: #4a90e2;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 10px 0;
+    }
+    #transposeBtn:hover {
+      background: #357ac8;
+    }
+
+    /* ▼ コピーアイコン（SVG） */
+    #copyIconOverlay {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      cursor: pointer;
+      opacity: 0.85;
+      background: #fff;
+      padding: 4px;
+      border: 1px solid #aaa;
+      border-radius: 4px;
+      z-index: 10;
+    }
+    #copyIconOverlay:hover {
+      opacity: 1;
+    }
+    #copyLabel {
+      font-size: 10pt;
+      margin-left: 4px;
+      vertical-align: top;
+    }
+
+    /* ▼ 出力textareaのラッパー */
+    #csvOutputWrapper {
+      width: 100%;
+      position: relative;
+      display: inline-block;
+    }
+
+    /* ▼ 横幅いっぱいのダウンロードボタン */
+    #downloadBtnWide {
+      display: block;
+      width: 100%;
+      padding: 14px 0;
+      font-size: 18px;
+      font-weight: bold;
+      background: #5cb85c;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 10px 0;
+    }
+    #downloadBtnWide:hover {
+      background: #4e9e4e;
+    }
   </style>
 </head>
 <body>
   <h2>入力: CSV/TSV を貼り付け（ドラッグ＆ドロップ可）またはファイル選択</h2>
-  <textarea id="csvInput" rows="10" cols="80"
-    placeholder="ここにCSV/TSVを貼り付け、またはファイルをドラッグ＆ドロップ"></textarea>
-  <div>
-    <input type="file" id="fileInput" accept=".csv,.tsv">
+
+  <div id="csvInputWrapper">
+    <textarea id="csvInput" rows="10" cols="80"
+      placeholder="ここにCSV/TSVを貼り付け、またはファイルをドラッグ＆ドロップ"
+    ></textarea>
+
+    <label id="fileButtonOverlay">
+      ファイル選択
+      <input type="file" id="fileInput" accept=".csv,.tsv" style="display:none;">
+    </label>
   </div>
 
-  <h2>転置結果</h2>
-  <p>
-    <button id="transposeBtn">転置する</button>
-  </p>
+  <button id="transposeBtn">転置する</button>
 
-  <textarea id="csvOutput" rows="10" cols="80" readonly
-    placeholder="転置実行ボタンを押すと結果がここに表示されます"
-  ></textarea>
-  <div>
-    <div>
-      クリップボードの形式:
-      <label>
-        <input type="radio" name="format" value="tsv" checked>
-        TSV（Excel向け・デフォルト）
-      </label>
-      <label>
-        <input type="radio" name="format" value="csv">
-        CSV
-      </label>
+  <!-- ▼ 出力textareaのラッパー -->
+  <div id="csvOutputWrapper">
+    <textarea id="csvOutput" rows="10" cols="80" readonly
+      placeholder="転置実行ボタンを押すと結果がここに表示されます"
+    ></textarea>
+
+    <!-- ▼ インラインSVGコピーアイコン -->
+    <div id="copyIconOverlay">
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <path fill="#333"
+          d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+      </svg>
+      <span id="copyLabel">コピー</span>
     </div>
-    <button id="downloadBtn">CSVとしてダウンロード（常にBOM付き）</button>
-    <button id="copyBtn">クリップボードにコピー（選択形式）</button>
   </div>
+
+  <!-- ▼ 横幅いっぱいのダウンロードボタン -->
+  <button id="downloadBtnWide">CSVとしてダウンロード（常にBOM付き）</button>
 
   <script>
     const fileInput = document.getElementById('fileInput');
     const csvInput = document.getElementById('csvInput');
     const csvOutput = document.getElementById('csvOutput');
     const transposeBtn = document.getElementById('transposeBtn');
-    const downloadBtn = document.getElementById('downloadBtn');
-    const copyBtn = document.getElementById('copyBtn');
+    const downloadBtnWide = document.getElementById('downloadBtnWide');
+    const copyIconOverlay = document.getElementById('copyIconOverlay');
 
-    // ファイル読み込み（BOM対応）
+    /* ▼ コンテキストメニュー */
+    csvOutput.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+
+      const menu = document.createElement("div");
+      menu.style.position = "fixed";
+      menu.style.top = e.clientY + "px";
+      menu.style.left = e.clientX + "px";
+      menu.style.background = "#fff";
+      menu.style.border = "1px solid #ccc";
+      menu.style.padding = "4px";
+      menu.style.zIndex = 9999;
+
+      const addItem = (label, handler) => {
+        const item = document.createElement("div");
+        item.textContent = label;
+        item.style.padding = "6px 12px";
+        item.style.cursor = "pointer";
+        item.addEventListener("click", () => {
+          handler();
+          document.body.removeChild(menu);
+        });
+        item.addEventListener("mouseover", () => item.style.background = "#eef");
+        item.addEventListener("mouseout", () => item.style.background = "#fff");
+        menu.appendChild(item);
+      };
+
+      addItem("TSVでクリップボードにコピー", () => {
+        navigator.clipboard.writeText(csvOutput.value);
+        showCopiedLabel();
+      });
+
+      addItem("CSVでクリップボードにコピー", () => {
+        const rows = csvOutput.value.split(/\r?\n/).map(line => line.split("\t"));
+        const csvText = rows.map(r => r.join(",")).join("\r\n");
+        navigator.clipboard.writeText(csvText);
+        showCopiedLabel();
+      });
+
+      addItem("CSVでダウンロード（BOM付き）", () => {
+        downloadCsv();
+      });
+
+      document.body.appendChild(menu);
+
+      document.addEventListener("click", () => {
+        if (document.body.contains(menu)) {
+          document.body.removeChild(menu);
+        }
+      }, { once: true });
+    });
+
+    function showCopiedLabel() {
+      const label = document.getElementById("copyLabel");
+      label.textContent = "コピーしました";
+
+      setTimeout(() => {
+        label.textContent = "コピー";
+      }, 3000);
+    }
+
+    /* ▼ コピーアイコン（TSV形式でコピー） */
+    copyIconOverlay.addEventListener("click", async () => {
+      const text = csvOutput.value;
+      if (!text) {
+        alert("転置結果がありません");
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      showCopiedLabel();
+      // alert("TSV形式でコピーしました");
+    });
+
+    /* ▼ ダウンロード処理（共通化） */
+    function downloadCsv() {
+      const text = csvOutput.value;
+      if (!text) {
+        alert("転置結果がありません");
+        return;
+      }
+
+      const rows = text.split(/\r?\n/).map(line => line.split("\t"));
+      const csvText = rows.map(r => r.join(",")).join("\r\n");
+
+      const bom = "\uFEFF";
+      const blob = new Blob([bom + csvText], { type: "text/csv;charset=utf-8;" });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "transposed.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    downloadBtnWide.addEventListener("click", downloadCsv);
+
+    /* ▼ 以下はあなたの元のコード（転置処理など） */
     function loadFile(file) {
       const reader = new FileReader();
       reader.onload = (e) => {
         let text = e.target.result;
-
-        // BOM除去
-        if (text.charCodeAt(0) === 0xFEFF) {
-          text = text.slice(1);
-        }
-
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
         csvInput.value = text;
       };
-      reader.readAsText(file, 'utf-8');
+      reader.readAsText(file, "utf-8");
     }
 
-    fileInput.addEventListener('change', () => {
+    fileInput.addEventListener("change", () => {
       const file = fileInput.files[0];
       if (file) loadFile(file);
     });
 
-    // textarea にドラッグ＆ドロップ対応
-    csvInput.addEventListener('dragover', (e) => {
+    csvInput.addEventListener("dragover", (e) => {
       e.preventDefault();
-      csvInput.classList.add('dragover');
+      csvInput.classList.add("dragover");
     });
 
-    csvInput.addEventListener('dragleave', () => {
-      csvInput.classList.remove('dragover');
+    csvInput.addEventListener("dragleave", () => {
+      csvInput.classList.remove("dragover");
     });
 
-    csvInput.addEventListener('drop', (e) => {
+    csvInput.addEventListener("drop", (e) => {
       e.preventDefault();
-      csvInput.classList.remove('dragover');
-
+      csvInput.classList.remove("dragover");
       const file = e.dataTransfer.files[0];
       if (file) loadFile(file);
     });
 
-    // 出力形式の区切り文字
-    function getSelectedDelimiter() {
-      const format = document.querySelector('input[name="format"]:checked').value;
-      return format === 'tsv' ? '\t' : ',';
-    }
-
-    // 入力の区切り文字を自動判定（TSV優先）
     function detectDelimiter(text) {
-      if (text.includes('\t')) return '\t';
-      return ',';
+      return text.includes("\t") ? "\t" : ",";
     }
 
-    // 転置処理
     function transposeCsv(text, delimiter) {
       const rows = text.split(/\r?\n/).map(line => line.split(delimiter));
       const maxCols = Math.max(...rows.map(r => r.length));
-
       const normalized = rows.map(r => {
         const copy = r.slice();
-        while (copy.length < maxCols) copy.push('');
+        while (copy.length < maxCols) copy.push("");
         return copy;
       });
-
       const transposed = [];
       for (let c = 0; c < maxCols; c++) {
         const newRow = [];
@@ -134,77 +299,27 @@
         }
         transposed.push(newRow);
       }
-
       return transposed;
     }
 
-    // 区切り文字変換
     function convertDelimiter(rows, toDelim) {
-      return rows.map(row => row.join(toDelim)).join('\r\n');
+      return rows.map(row => row.join(toDelim)).join("\r\n");
     }
 
-    // 転置ボタン
-    transposeBtn.addEventListener('click', () => {
+    transposeBtn.addEventListener("click", () => {
       const inputText = csvInput.value.trim();
       if (!inputText) {
-        alert('CSV/TSVを入力してください');
+        alert("CSV/TSVを入力してください");
         return;
       }
-
-      // ダブルクォート検出（未サポート）
       if (inputText.includes('"')) {
-        alert('ダブルクォートを含むCSVは未サポートです');
+        alert("ダブルクォートを含むCSVは未サポートです");
         return;
       }
-
       const delimiter = detectDelimiter(inputText);
       const transposed = transposeCsv(inputText, delimiter);
-
-      const outputDelimiter = getSelectedDelimiter();
-      const converted = convertDelimiter(transposed, outputDelimiter);
-
+      const converted = convertDelimiter(transposed, "\t");
       csvOutput.value = converted;
-    });
-
-    // ダウンロード（常に BOM 付き CSV）
-    downloadBtn.addEventListener('click', () => {
-      const text = csvOutput.value;
-      if (!text) {
-        alert('転置結果がありません');
-        return;
-      }
-
-      const currentDelim = getSelectedDelimiter();
-      const rows = text.split(/\r?\n/).map(line => line.split(currentDelim));
-      const csvText = convertDelimiter(rows, ',');
-
-      const bom = "\uFEFF";  // UTF-8 BOM
-      const blob = new Blob([bom + csvText], { type: 'text/csv;charset=utf-8;' });
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'transposed.csv';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    });
-
-    // クリップボードコピー
-    copyBtn.addEventListener('click', async () => {
-      const text = csvOutput.value;
-      if (!text) {
-        alert('転置結果がありません');
-        return;
-      }
-
-      try {
-        await navigator.clipboard.writeText(text);
-        alert('クリップボードにコピーしました');
-      } catch (e) {
-        alert('コピーに失敗しました');
-      }
     });
   </script>
 </body>
