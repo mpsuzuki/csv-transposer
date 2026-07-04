@@ -1,4 +1,4 @@
-# csv-tranposer
+# csv-transposer
 
 ## これは何ですか？
 ブラウザの中で、
